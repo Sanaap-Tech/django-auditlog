@@ -4,8 +4,8 @@ from django.conf import settings
 
 from auditlog.context import auditlog_disabled
 from auditlog.diff import model_instance_diff
-from auditlog.models import LogEntry
 from auditlog.signals import post_log, pre_log
+from auditlog import get_logentry_model
 
 
 def check_disable(signal_handler):
@@ -14,7 +14,6 @@ def check_disable(signal_handler):
     - 'auditlog_disabled' from threadlocal is true
     - raw = True and AUDITLOG_DISABLE_ON_RAW_SAVE is True
     """
-
     @wraps(signal_handler)
     def wrapper(*args, **kwargs):
         try:
@@ -38,7 +37,7 @@ def log_create(sender, instance, created, **kwargs):
     """
     if created:
         _create_log_entry(
-            action=LogEntry.Action.CREATE,
+            action=get_logentry_model().Action.CREATE,
             instance=instance,
             sender=sender,
             diff_old=None,
@@ -58,7 +57,7 @@ def log_update(sender, instance, **kwargs):
         update_fields = kwargs.get("update_fields", None)
         old = sender._default_manager.filter(pk=instance.pk).first()
         _create_log_entry(
-            action=LogEntry.Action.UPDATE,
+            action=get_logentry_model().Action.UPDATE,
             instance=instance,
             sender=sender,
             diff_old=old,
@@ -77,7 +76,7 @@ def log_delete(sender, instance, **kwargs):
     """
     if instance.pk is not None:
         _create_log_entry(
-            action=LogEntry.Action.DELETE,
+            action=get_logentry_model().Action.DELETE,
             instance=instance,
             sender=sender,
             diff_old=instance,
@@ -94,7 +93,7 @@ def log_access(sender, instance, **kwargs):
     """
     if instance.pk is not None:
         _create_log_entry(
-            action=LogEntry.Action.ACCESS,
+            action=get_logentry_model().Action.ACCESS,
             instance=instance,
             sender=sender,
             diff_old=None,
@@ -122,6 +121,7 @@ def _create_log_entry(
 
     if any(item[1] is False for item in pre_log_results):
         return
+    LogEntry = get_logentry_model()
 
     error = None
     log_entry = None
@@ -169,6 +169,7 @@ def make_log_m2m_changes(field_name):
         """Handle m2m_changed and call LogEntry.objects.log_m2m_changes as needed."""
         if action not in ["post_add", "post_clear", "post_remove"]:
             return
+        LogEntry = get_logentry_model()
 
         if action == "post_clear":
             changed_queryset = kwargs["model"]._default_manager.all()

@@ -303,7 +303,7 @@ class LogEntryManager(models.Manager):
         return data
 
 
-class LogEntry(models.Model):
+class AbstractLogEntry(models.Model):
     """
     Represents an entry in the audit log. The content type is saved along with the textual and numeric
     (if available) primary key, as well as the textual representation of the object when it was saved.
@@ -392,6 +392,7 @@ class LogEntry(models.Model):
     objects = LogEntryManager()
 
     class Meta:
+        abstract = True
         get_latest_by = "timestamp"
         ordering = ["-timestamp"]
         verbose_name = _("log entry")
@@ -557,6 +558,11 @@ class LogEntry(models.Model):
         # ObjectDoesNotExist will be raised if the object was deleted.
         except ObjectDoesNotExist:
             return f"Deleted '{field.related_model.__name__}' ({value})"
+
+
+class LogEntry(AbstractLogEntry):
+    class Meta(AbstractLogEntry.Meta):
+        swappable = "AUDITLOG_LOGENTRY_MODEL"
 
 
 class AuditlogHistoryField(GenericRelation):
