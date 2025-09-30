@@ -24,6 +24,7 @@ from django.utils.encoding import smart_str
 from django.utils.translation import gettext_lazy as _
 
 from auditlog.diff import get_mask_function
+from auditlog import get_logentry_model
 
 DEFAULT_OBJECT_REPR = "<error forming object repr>"
 
@@ -585,7 +586,7 @@ class AuditlogHistoryField(GenericRelation):
     """
 
     def __init__(self, pk_indexable=True, delete_related=False, **kwargs):
-        kwargs["to"] = LogEntry
+        kwargs["to"] = get_logentry_model()
 
         if pk_indexable:
             kwargs["object_id_field"] = "object_id"
