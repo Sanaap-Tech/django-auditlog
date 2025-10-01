@@ -71,8 +71,11 @@ def _set_extra_data(sender, instance, signal_duid, **kwargs):
         set_actor(auditlog, instance, sender)
 
         for key in auditlog:
-            if hasattr(instance, key):
-                setattr(instance, key, auditlog[key])
+            if hasattr(LogEntry, key):
+                if callable(auditlog[key]):
+                    setattr(instance, key, auditlog[key]())
+                else:
+                    setattr(instance, key, auditlog[key])
 
 
 @contextlib.contextmanager
