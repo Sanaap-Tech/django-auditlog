@@ -2,10 +2,10 @@ from functools import wraps
 
 from django.conf import settings
 
+from auditlog import get_logentry_model
 from auditlog.context import auditlog_disabled
 from auditlog.diff import model_instance_diff
 from auditlog.signals import post_log, pre_log
-from auditlog import get_logentry_model
 
 
 def check_disable(signal_handler):
@@ -14,6 +14,7 @@ def check_disable(signal_handler):
     - 'auditlog_disabled' from threadlocal is true
     - raw = True and AUDITLOG_DISABLE_ON_RAW_SAVE is True
     """
+
     @wraps(signal_handler)
     def wrapper(*args, **kwargs):
         try:

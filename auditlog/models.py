@@ -23,8 +23,8 @@ from django.utils import timezone as django_timezone
 from django.utils.encoding import smart_str
 from django.utils.translation import gettext_lazy as _
 
-from auditlog.diff import get_mask_function
 from auditlog import get_logentry_model
+from auditlog.diff import get_mask_function
 
 DEFAULT_OBJECT_REPR = "<error forming object repr>"
 

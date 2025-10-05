@@ -60,14 +60,17 @@ from test_app.models import (
     UUIDPrimaryKeyModel,
 )
 
+from auditlog import get_logentry_model
 from auditlog.admin import LogEntryAdmin
 from auditlog.cid import get_cid
 from auditlog.context import disable_auditlog, set_actor
 from auditlog.diff import mask_str, model_instance_diff
 from auditlog.middleware import AuditlogMiddleware
-from auditlog.models import DEFAULT_OBJECT_REPR, LogEntry
+from auditlog.models import DEFAULT_OBJECT_REPR
 from auditlog.registry import AuditlogModelRegistry, AuditLogRegistrationError, auditlog
 from auditlog.signals import post_log, pre_log
+
+LogEntry = get_logentry_model()
 
 
 class SimpleModelTest(TestCase):
@@ -97,6 +100,8 @@ class SimpleModelTest(TestCase):
 
     def test_update(self):
         """Updates are logged correctly."""
+        LogEntry = get_logentry_model()
+
         # Get the object to work with
         obj = self.obj
 
@@ -125,6 +130,8 @@ class SimpleModelTest(TestCase):
         )
 
     def test_update_specific_field_supplied_via_save_method(self):
+        LogEntry = get_logentry_model()
+
         obj = self.obj
 
         # Change 2 fields, but save one only.
@@ -148,6 +155,8 @@ class SimpleModelTest(TestCase):
         values `(None, [])`, the package should too.
         https://docs.djangoproject.com/en/3.2/ref/models/instances/#specifying-which-fields-to-save
         """
+        LogEntry = get_logentry_model()
+
         obj = self.obj
 
         # Change boolean, but save no changes by passing an empty list.
@@ -174,6 +183,8 @@ class SimpleModelTest(TestCase):
 
     def test_delete(self):
         """Deletion is logged correctly."""
+        LogEntry = get_logentry_model()
+
         # Get the object to work with
         obj = self.obj
         content_type = ContentType.objects.get_for_model(obj.__class__)
@@ -201,6 +212,8 @@ class SimpleModelTest(TestCase):
         self.test_create()
 
     def test_create_log_to_object_from_other_database(self):
+        LogEntry = get_logentry_model()
+
         msg = "The log should not try to write to the same database as the object"
 
         instance = self.obj
@@ -226,6 +239,8 @@ class SimpleModelTest(TestCase):
         self.assertTrue(start <= history.timestamp <= end)
 
     def test_manual_timestamp(self):
+        LogEntry = get_logentry_model()
+
         timestamp = datetime.datetime(1999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
         LogEntry.objects.log_create(
             instance=self.obj,
@@ -237,6 +252,8 @@ class SimpleModelTest(TestCase):
         self.assertTrue(history.exists())
 
     def test_create_duplicate_with_pk_none(self):
+        LogEntry = get_logentry_model()
+
         initial_entries_count = LogEntry.objects.count()
         obj = self.obj
         obj.pk = None
@@ -271,6 +288,7 @@ class WithActorMixin:
         super().setUp()
 
     def tearDown(self):
+        LogEntry = get_logentry_model()
         user_email = self.user.email
         self.user.delete()
         auditlog_entries = LogEntry.objects.filter(actor_email=user_email).all()
@@ -1358,7 +1376,7 @@ class RegisterModelSettingsTest(TestCase):
 
         self.assertTrue(self.test_auditlog.contains(SimpleExcludeModel))
         self.assertTrue(self.test_auditlog.contains(ChoicesFieldModel))
-        self.assertEqual(len(self.test_auditlog.get_models()), 34)
+        self.assertEqual(len(self.test_auditlog.get_models()), 35)
 
     def test_register_models_register_model_with_attrs(self):
         self.test_auditlog._register_models(
@@ -1739,21 +1757,24 @@ class AdminPanelTest(TestCase):
         )
         self.site = AdminSite()
         self.admin = LogEntryAdmin(LogEntry, self.site)
+        self.admin_path_prefix = (
+            f"admin/{LogEntry._meta.app_label}/{LogEntry._meta.model_name}"
+        )
         with freezegun.freeze_time("2022-08-01 12:00:00Z"):
             self.obj = SimpleModel.objects.create(text="For admin logentry test")
 
     def test_auditlog_admin(self):
         self.client.force_login(self.user)
         log_pk = self.obj.history.latest().pk
-        res = self.client.get("/admin/auditlog/logentry/")
+        res = self.client.get(f"/{self.admin_path_prefix}/")
         self.assertEqual(res.status_code, 200)
-        res = self.client.get("/admin/auditlog/logentry/add/")
+        res = self.client.get(f"/{self.admin_path_prefix}/add/")
         self.assertEqual(res.status_code, 403)
-        res = self.client.get(f"/admin/auditlog/logentry/{log_pk}/", follow=True)
+        res = self.client.get(f"/{self.admin_path_prefix}/{log_pk}/", follow=True)
         self.assertEqual(res.status_code, 200)
-        res = self.client.get(f"/admin/auditlog/logentry/{log_pk}/delete/")
+        res = self.client.get(f"/{self.admin_path_prefix}/{log_pk}/delete/")
         self.assertEqual(res.status_code, 403)
-        res = self.client.get(f"/admin/auditlog/logentry/{log_pk}/history/")
+        res = self.client.get(f"/{self.admin_path_prefix}/{log_pk}/history/")
         self.assertEqual(res.status_code, 200)
 
     def test_created_timezone(self):
@@ -1783,7 +1804,7 @@ class AdminPanelTest(TestCase):
     def test_cid(self):
         self.client.force_login(self.user)
         expected_response = (
-            '<a href="/admin/auditlog/logentry/?cid=123" '
+            f'<a href="/{self.admin_path_prefix}/?cid=123" '
             'title="Click to filter by records with this correlation id">123</a>'
         )
 
@@ -1791,7 +1812,7 @@ class AdminPanelTest(TestCase):
         log_entry.cid = "123"
         log_entry.save()
 
-        res = self.client.get("/admin/auditlog/logentry/")
+        res = self.client.get(f"/{self.admin_path_prefix}/")
         self.assertEqual(res.status_code, 200)
         self.assertIn(expected_response, res.rendered_content)
 
@@ -1799,7 +1820,7 @@ class AdminPanelTest(TestCase):
         log = self.obj.history.latest()
         obj_pk = self.obj.pk
         delete_log_request = RequestFactory().post(
-            f"/admin/auditlog/logentry/{log.pk}/delete/"
+            f"/{self.admin_path_prefix}/{log.pk}/delete/"
         )
         delete_log_request.resolver_match = resolve(delete_log_request.path)
         delete_log_request.user = self.user
@@ -2796,7 +2817,7 @@ class SignalTests(TestCase):
 
         self.assertSignals(LogEntry.Action.DELETE)
 
-    @patch("auditlog.receivers.LogEntry.objects")
+    @patch(f"{LogEntry.__module__}.{LogEntry.__name__}.objects")
     def test_signals_errors(self, log_entry_objects_mock):
         class CustomSignalError(BaseException):
             pass

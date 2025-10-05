@@ -4,9 +4,9 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 
+from auditlog import get_logentry_model
 from auditlog.filters import CIDFilter, ResourceTypeFilter
 from auditlog.mixins import LogEntryAdminMixin
-from auditlog import get_logentry_model
 
 LogEntry = get_logentry_model()
 

@@ -59,7 +59,8 @@ class AuditlogMiddleware:
     def __call__(self, request, context_data={}):
         context_data["remote_addr"] = self._get_remote_addr(request)
         context_data["remote_port"] = self._get_remote_port(request)
-        context_data["actor"] = self._get_actor(request)
+        if "actor" not in context_data:
+            context_data["actor"] = self._get_actor(request)
 
         set_cid(request)
 

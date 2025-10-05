@@ -63,4 +63,6 @@ settings.AUDITLOG_STORE_JSON_CHANGES = getattr(
 
 settings.AUDITLOG_MASK_CALLABLE = getattr(settings, "AUDITLOG_MASK_CALLABLE", None)
 
-settings.AUDITLOG_LOGENTRY_MODEL = getattr(settings, "AUDITLOG_LOGENTRY_MODEL", "auditlog.LogEntry")
+settings.AUDITLOG_LOGENTRY_MODEL = getattr(
+    settings, "AUDITLOG_LOGENTRY_MODEL", "auditlog.LogEntry"
+)

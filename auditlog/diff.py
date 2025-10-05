@@ -8,6 +8,7 @@ from django.db.models import NOT_PROVIDED, DateTimeField, ForeignKey, JSONField,
 from django.utils import timezone as django_timezone
 from django.utils.encoding import smart_str
 from django.utils.module_loading import import_string
+
 from auditlog import get_logentry_model
 
 
@@ -30,7 +31,7 @@ def track_field(field):
     # Do not track relations to LogEntry
     if (
         getattr(field, "remote_field", None) is not None
-        and field.remote_field.model == get_logentry_model() 
+        and field.remote_field.model == get_logentry_model()
     ):
         return False
 
