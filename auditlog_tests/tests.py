@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import freezegun
 from dateutil.tz import gettz
+from django import VERSION as DJANGO_VERSION
 from django.apps import apps
 from django.conf import settings
 from django.contrib.admin.sites import AdminSite
@@ -1229,15 +1230,30 @@ class DateTimeFieldModelTest(TestCase):
         dtm.naive_dt = Now()
         self.assertEqual(dtm.naive_dt, Now())
         dtm.save()
-        self.assertEqual(dtm.naive_dt, Now())
+
+        # Django 6.0+ evaluates expressions during save (django ticket #27222)
+        if DJANGO_VERSION >= (6, 0, 0):
+            with self.subTest("After save Django 6.0+"):
+                self.assertIsInstance(dtm.naive_dt, datetime.datetime)
+        else:
+            with self.subTest("After save Django < 6.0"):
+                self.assertEqual(dtm.naive_dt, Now())
 
     def test_json_field_value_none(self):
         json_model = NullableJSONModel(json=Value(None, JSONField()))
         json_model.save()
         self.assertEqual(json_model.history.count(), 1)
-        self.assertEqual(
-            json_model.history.latest().changes_dict["json"][1], "Value(None)"
-        )
+        changes_dict = json_model.history.latest().changes_dict
+
+        # Django 6.0+ evaluates expressions during save (django ticket #27222)
+        if DJANGO_VERSION >= (6, 0, 0):
+            with self.subTest("Django 6.0+"):
+                # Value(None) gets evaluated to "null"
+                self.assertEqual(changes_dict["json"][1], "null")
+        else:
+            with self.subTest("Django < 6.0"):
+                # Value(None) is preserved as string representation
+                self.assertEqual(changes_dict["json"][1], "Value(None)")
 
 
 class UnregisterTest(TestCase):
@@ -1342,7 +1358,7 @@ class RegisterModelSettingsTest(TestCase):
 
         self.assertTrue(self.test_auditlog.contains(SimpleExcludeModel))
         self.assertTrue(self.test_auditlog.contains(ChoicesFieldModel))
-        self.assertEqual(len(self.test_auditlog.get_models()), 33)
+        self.assertEqual(len(self.test_auditlog.get_models()), 34)
 
     def test_register_models_register_model_with_attrs(self):
         self.test_auditlog._register_models(
