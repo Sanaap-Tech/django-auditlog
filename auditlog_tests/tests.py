@@ -63,7 +63,7 @@ from test_app.models import (
 from auditlog import get_logentry_model
 from auditlog.admin import LogEntryAdmin
 from auditlog.cid import get_cid
-from auditlog.context import disable_auditlog, set_actor
+from auditlog.context import disable_auditlog, set_actor, set_extra_data
 from auditlog.diff import mask_str, model_instance_diff
 from auditlog.middleware import AuditlogMiddleware
 from auditlog.models import DEFAULT_OBJECT_REPR
@@ -100,8 +100,6 @@ class SimpleModelTest(TestCase):
 
     def test_update(self):
         """Updates are logged correctly."""
-        LogEntry = get_logentry_model()
-
         # Get the object to work with
         obj = self.obj
 
@@ -130,8 +128,6 @@ class SimpleModelTest(TestCase):
         )
 
     def test_update_specific_field_supplied_via_save_method(self):
-        LogEntry = get_logentry_model()
-
         obj = self.obj
 
         # Change 2 fields, but save one only.
@@ -155,8 +151,6 @@ class SimpleModelTest(TestCase):
         values `(None, [])`, the package should too.
         https://docs.djangoproject.com/en/3.2/ref/models/instances/#specifying-which-fields-to-save
         """
-        LogEntry = get_logentry_model()
-
         obj = self.obj
 
         # Change boolean, but save no changes by passing an empty list.
@@ -183,8 +177,6 @@ class SimpleModelTest(TestCase):
 
     def test_delete(self):
         """Deletion is logged correctly."""
-        LogEntry = get_logentry_model()
-
         # Get the object to work with
         obj = self.obj
         content_type = ContentType.objects.get_for_model(obj.__class__)
@@ -212,8 +204,6 @@ class SimpleModelTest(TestCase):
         self.test_create()
 
     def test_create_log_to_object_from_other_database(self):
-        LogEntry = get_logentry_model()
-
         msg = "The log should not try to write to the same database as the object"
 
         instance = self.obj
@@ -239,8 +229,6 @@ class SimpleModelTest(TestCase):
         self.assertTrue(start <= history.timestamp <= end)
 
     def test_manual_timestamp(self):
-        LogEntry = get_logentry_model()
-
         timestamp = datetime.datetime(1999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
         LogEntry.objects.log_create(
             instance=self.obj,
@@ -252,8 +240,6 @@ class SimpleModelTest(TestCase):
         self.assertTrue(history.exists())
 
     def test_create_duplicate_with_pk_none(self):
-        LogEntry = get_logentry_model()
-
         initial_entries_count = LogEntry.objects.count()
         obj = self.obj
         obj.pk = None
@@ -275,7 +261,7 @@ class NoActorMixin:
         self.assertIsNone(log_entry.actor)
 
 
-class WithActorMixin:
+class WithActorMixinBase:
     sequence = itertools.count()
 
     def setUp(self):
@@ -288,16 +274,11 @@ class WithActorMixin:
         super().setUp()
 
     def tearDown(self):
-        LogEntry = get_logentry_model()
         user_email = self.user.email
         self.user.delete()
         auditlog_entries = LogEntry.objects.filter(actor_email=user_email).all()
         self.assertIsNotNone(auditlog_entries, msg="All auditlog entries are deleted.")
         super().tearDown()
-
-    def make_object(self):
-        with set_actor(self.user):
-            return super().make_object()
 
     def check_create_log_entry(self, obj, log_entry):
         super().check_create_log_entry(obj, log_entry)
@@ -321,6 +302,12 @@ class WithActorMixin:
         super().check_delete_log_entry(obj, log_entry)
         self.assertEqual(log_entry.actor, self.user)
         self.assertEqual(log_entry.actor_email, self.user.email)
+
+
+class WithActorMixin(WithActorMixinBase):
+    def make_object(self):
+        with set_actor(self.user):
+            return super().make_object()
 
 
 class AltPrimaryKeyModelBase(SimpleModelTest):
@@ -3009,3 +2996,45 @@ class CustomMaskModelTest(TestCase):
             "****7654",
             msg="The custom masking function should be used in serialized data",
         )
+
+
+class WithExtraDataMixin(WithActorMixinBase):
+    def get_context_data(self):
+        return {}
+
+    def make_object(self):
+        with set_extra_data(context_data=self.get_context_data()):
+            return super().make_object()
+
+
+class ExtraDataTest(WithExtraDataMixin, SimpleModelTest):
+    def get_context_data(self):
+        return {
+            "actor": self.user,
+        }
+
+
+class ExtraDataWithRoleTest(WithExtraDataMixin, SimpleModelTest):
+    def get_context_data(self):
+        return {
+            "actor": self.user,
+            "role": "admin",
+        }
+
+    def test_extra_data_role(self):
+        log = self.obj.history.first()
+        if settings.AUDITLOG_LOGENTRY_MODEL != "auditlog.LogEntry":
+            self.assertEqual(log.role, "admin")
+
+
+class ExtraDataWithRoleLazyLoadTest(WithExtraDataMixin, SimpleModelTest):
+    def get_context_data(self):
+        return {
+            "actor": self.user,
+            "role": lambda: "admin",
+        }
+
+    def test_extra_data_role(self):
+        log = self.obj.history.first()
+        if settings.AUDITLOG_LOGENTRY_MODEL != "auditlog.LogEntry":
+            self.assertEqual(log.role, "admin")
